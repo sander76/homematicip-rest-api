@@ -1,29 +1,28 @@
 import configparser
+import logging
 import sys
 import time
 from argparse import ArgumentParser
 from builtins import str
 from collections import namedtuple
+from logging.handlers import TimedRotatingFileHandler
 
 from homematicip.device import *
 from homematicip.group import *
 from homematicip.home import Home
 
-# import config
 logger = None
 
-# def create_logger(level, file_name):
-#     nonlocal logger
-#     logger = logging.getLogger()
-#     logger.setLevel(level)
-#     handler = logging.handlers.TimedRotatingFileHandler(file_name, when='midnight',
-#                                                         backupCount=5) if file_name else logging.StreamHandler()
-#     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-#     logger.addHandler(handler)
-#     return logger
 
-# todo: Commented this out as it seems to collide with the setting of loglevel inside the main method.
-# logger = create_logger()
+def create_logger(level, file_name):
+    logger = logging.getLogger()
+    logger.setLevel(level)
+    handler = TimedRotatingFileHandler(file_name, when='midnight',
+                                                        backupCount=5) if file_name else logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    return logger
+
 
 HmipConfig = namedtuple('HmipConfig', ['auth_token', 'access_point', 'log_level', 'log_file'])
 
@@ -38,7 +37,7 @@ def load_config_file(config_file: str) -> HmipConfig:
         _hmip_config = HmipConfig(
             _config['AUTH']['AuthToken'],
             _config['AUTH']['AccessPoint'],
-            _config['LOGGING']['Level'],
+            _config.get('LOGGING', {}).get('Level', None),
             _config.get('LOGGING', {}).get('FileName', None)
         )
         return _hmip_config
@@ -47,9 +46,6 @@ def load_config_file(config_file: str) -> HmipConfig:
 def main():
     parser = ArgumentParser(description="a cli wrapper for the homematicip API")
     parser.add_argument("--config_file", type=str, default="config.ini")
-    # todo: Shouldn't this be done inside the config file ?
-    parser.add_argument("--debug-level", dest="debug_level", type=int, default=30,
-                        help="the debug level which should get used(Critical=50, DEBUG=10)")
 
     group = parser.add_argument_group("Display Configuration")
     group.add_argument("--dump-configuration", action="store_true", dest="dump_config",
@@ -130,20 +126,19 @@ def main():
         parser.print_help()
         return
 
-    args = None
+    # todo: You're absorbing an exception without mentioning/logging it. The function just returns without message and leaves the user without any info why.
     try:
         args = parser.parse_args()
     except:
         return
-
-    # todo: Something wrong here: Setting log level here and in the (old and new) config file.
-    # logger.setLevel(args.debug_level)
 
     try:
         _config = load_config_file(args.config_file)
     except FileNotFoundError:
         print("##### CONFIG FILE NOT FOUND: {} #####".format(args.config_file))
         return
+
+
 
     home = Home()
     home.set_auth_token(_config.auth_token)
